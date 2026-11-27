@@ -1,5 +1,5 @@
 import { DragEvent, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { messageOf } from "../api/client";
 import { projectsApi } from "../api/projects";
 import { videosApi } from "../api/videos";
@@ -9,7 +9,6 @@ import { useAsync } from "../hooks/useAsync";
 
 export default function UploadPage() {
   const { projectId = "" } = useParams();
-  const navigate = useNavigate();
   const project = useAsync(() => projectsApi.get(projectId), [projectId]);
   const video = useAsync(() => videosApi.get(projectId), [projectId]);
   const [uploading, setUploading] = useState(false);
@@ -38,9 +37,9 @@ export default function UploadPage() {
   async function commitName() {
     const next = nameDraft?.trim();
     setNameDraft(null);
-    if (!next || next === project.data?.name) return;
+    if (!next || next === project.data?.title) return;
     try {
-      project.setData(await projectsApi.rename(projectId, next));
+      project.setData(await projectsApi.update(projectId, { title: next }));
     } catch (e) {
       setError(messageOf(e));
     }
@@ -56,19 +55,19 @@ export default function UploadPage() {
   return (
     <section>
       <p>
-        <Link to="/">← プロジェクト一覧</Link>
+        <Link to={`/projects/${projectId}/editor`}>← 動画編集に戻る</Link>
       </p>
-      <h1>1. 動画アップロード</h1>
+      <h1>元動画のアップロード（任意）</h1>
       <ErrorBanner message={project.error ?? video.error} />
       <ErrorBanner message={error} onClose={() => setError(null)} />
 
       <label className="field">
         プロジェクト名
         <input
-          value={nameDraft ?? project.data?.name ?? ""}
+          value={nameDraft ?? project.data?.title ?? ""}
           onChange={(e) => setNameDraft(e.target.value)}
           onBlur={() => void commitName()}
-          maxLength={200}
+          maxLength={100}
         />
       </label>
 
@@ -118,11 +117,6 @@ export default function UploadPage() {
         </div>
       )}
 
-      <div className="row end">
-        <button className="primary" disabled={!v || uploading} onClick={() => navigate(`/projects/${projectId}/scenario`)}>
-          次へ（シナリオ入力）
-        </button>
-      </div>
     </section>
   );
 }

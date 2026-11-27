@@ -45,6 +45,20 @@ def parse_probe_output(data: dict) -> VideoInfo:
     )
 
 
+def parse_has_audio(data: dict) -> bool:
+    return any(s.get("codec_type") == "audio" for s in data.get("streams", []))
+
+
+def probe_has_audio(path: Path, ffprobe: str = "ffprobe") -> bool:
+    """動画に音声ストリームがあるか。調べられなければ False(元動画の音を混ぜずに書き出す)。"""
+    cmd = [ffprobe, "-v", "error", "-print_format", "json", "-show_streams", "-select_streams", "a", str(path)]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        return result.returncode == 0 and parse_has_audio(json.loads(result.stdout))
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return False
+
+
 def probe_video(path: Path) -> VideoInfo:
     cmd = ["ffprobe", "-v", "error", "-print_format", "json", "-show_format", "-show_streams", str(path)]
     try:

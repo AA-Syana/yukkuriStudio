@@ -21,10 +21,10 @@ class LocalStorage:
         return path
 
     def save_upload(
-        self, project_id: str, category: str, ext: str, fileobj: BinaryIO, max_bytes: int
+        self, prefix: str, category: str, ext: str, fileobj: BinaryIO, max_bytes: int
     ) -> str:
         """チャンク単位で保存する(大容量動画でもメモリを使い切らない)。保存先の相対パスを返す。"""
-        rel = f"{project_id}/{category}/{uuid.uuid4().hex}{ext}"
+        rel = f"{prefix}/{category}/{uuid.uuid4().hex}{ext}"
         dest = self.absolute(rel)
         dest.parent.mkdir(parents=True, exist_ok=True)
         written = 0
@@ -40,8 +40,34 @@ class LocalStorage:
             raise
         return rel
 
+    def save_bytes(self, prefix: str, category: str, ext: str, data: bytes) -> str:
+        """生成した音声・画像など、メモリ上のデータを保存する。"""
+        rel = f"{prefix}/{category}/{uuid.uuid4().hex}{ext}"
+        dest = self.absolute(rel)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)
+        return rel
+
+    def adopt_file(self, prefix: str, category: str, ext: str, src: Path) -> str:
+        """作業用フォルダで作ったファイルを、保存場所へ移す(大きなMP4をメモリに載せないため)。"""
+        rel = f"{prefix}/{category}/{uuid.uuid4().hex}{ext}"
+        dest = self.absolute(rel)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(dest))
+        return rel
+
     def delete(self, rel_path: str) -> None:
         self.absolute(rel_path).unlink(missing_ok=True)
 
-    def delete_project(self, project_id: str) -> None:
-        shutil.rmtree(self.absolute(project_id), ignore_errors=True)
+    def delete_tree(self, prefix: str) -> None:
+        """prefix 以下のファイルをまとめて削除する(プロジェクト単位・キャラクター単位の掃除に使う)。"""
+        shutil.rmtree(self.absolute(prefix), ignore_errors=True)
+
+    def copy_file(self, src_rel_path: str, prefix: str, category: str) -> str:
+        """既存のファイルを別の場所へ複製する(ライブラリの画像を、プロジェクト用のコピーへ渡すときに使う)。"""
+        src = self.absolute(src_rel_path)
+        rel = f"{prefix}/{category}/{uuid.uuid4().hex}{src.suffix}"
+        dest = self.absolute(rel)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dest)
+        return rel

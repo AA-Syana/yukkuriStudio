@@ -1,87 +1,50 @@
-import { FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { messageOf } from "../api/client";
+import { Link } from "react-router-dom";
 import { projectsApi } from "../api/projects";
 import ErrorBanner from "../components/ErrorBanner";
 import { useAsync } from "../hooks/useAsync";
+import { useRunner } from "../hooks/useRunner";
 
+/** 画面2: プロジェクト一覧・管理。 */
 export default function ProjectListPage() {
-  const navigate = useNavigate();
-  const { data: projects, loading, error, reload } = useAsync(projectsApi.list, []);
-  const [name, setName] = useState("");
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const projects = useAsync(() => projectsApi.list(), []);
+  const { busy, error, clearError, run } = useRunner();
 
-  async function guard(fn: () => Promise<void>) {
-    setActionError(null);
-    setBusy(true);
-    try {
-      await fn();
-    } catch (e) {
-      setActionError(messageOf(e));
-    } finally {
-      setBusy(false);
-    }
+  async function remove(id: string, title: string) {
+    const ok = window.confirm(
+      `「${title}」を削除しますか？\n台本・セリフ・生成した音声と、このプロジェクト用のキャラクターが全て削除されます。\n（キャラクター管理のキャラクターは削除されません）`,
+    );
+    if (!ok) return;
+    await run(() => projectsApi.remove(id));
+    projects.reload(); // 失敗した場合もエラー表示のうえ、一覧を最新にする
   }
-
-  const create = (e: FormEvent) => {
-    e.preventDefault();
-    void guard(async () => {
-      const project = await projectsApi.create(name);
-      navigate(`/projects/${project.id}/upload`);
-    });
-  };
-
-  const rename = (id: string, current: string) => {
-    const next = window.prompt("新しいプロジェクト名", current)?.trim();
-    if (!next || next === current) return;
-    void guard(async () => {
-      await projectsApi.rename(id, next);
-      reload();
-    });
-  };
-
-  const remove = (id: string, projectName: string) => {
-    if (!window.confirm(`「${projectName}」を削除しますか？動画やシナリオも全て削除されます。`)) return;
-    void guard(async () => {
-      await projectsApi.remove(id);
-      reload();
-    });
-  };
 
   return (
     <section>
-      <h1>プロジェクト一覧</h1>
-      <form className="row" onSubmit={create}>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="新しいプロジェクト名"
-          maxLength={200}
-          aria-label="プロジェクト名"
-        />
-        <button className="primary" disabled={busy || !name.trim()}>
-          新規作成
-        </button>
-      </form>
-      <ErrorBanner message={actionError} onClose={() => setActionError(null)} />
-      <ErrorBanner message={error} />
-      {loading && <p>読み込み中…</p>}
-      {projects && projects.length === 0 && <p className="muted">プロジェクトはまだありません。</p>}
+      <div className="row space-between">
+        <h1>プロジェクト</h1>
+        <Link to="/projects/new" className="button primary">＋ 新規プロジェクト</Link>
+      </div>
+      <ErrorBanner message={projects.error ?? error} onClose={clearError} />
+      {projects.loading && <p>読み込み中…</p>}
+      {!projects.loading && projects.data?.length === 0 && (
+        <p className="muted">プロジェクトがありません。「新規プロジェクト」から作成してください。</p>
+      )}
       <ul className="card-list">
-        {projects?.map((p) => (
-          <li key={p.id} className="card row space-between">
-            <div>
-              <Link to={`/projects/${p.id}/upload`}>{p.name}</Link>
-              <div className="muted small">更新: {new Date(p.updated_at).toLocaleString()}</div>
-            </div>
-            <div className="row">
-              <button onClick={() => rename(p.id, p.name)} disabled={busy}>
-                名前変更
-              </button>
-              <button className="danger" onClick={() => remove(p.id, p.name)} disabled={busy}>
-                削除
-              </button>
+        {projects.data?.map((p) => (
+          <li key={p.id} className="card">
+            <div className="row space-between">
+              <div>
+                <h2 className="project-title">{p.title}</h2>
+                {p.description && <p className="muted small">{p.description}</p>}
+                <p className="muted small">
+                  台本 {p.script_count}本 ／ キャラクター {p.character_count}人 ／ 更新 {new Date(p.updated_at).toLocaleString()}
+                </p>
+              </div>
+              <div className="row">
+                <Link to={`/projects/${p.id}/script`} className="button primary">台本・キャラクター</Link>
+                <Link to={`/projects/${p.id}/editor`} className="button">動画編集</Link>
+                <button className="danger" disabled={busy} onClick={() => void remove(p.id, p.title)}>削除</button>
+              </div>
             </div>
           </li>
         ))}
